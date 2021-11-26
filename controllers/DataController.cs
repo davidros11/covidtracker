@@ -6,7 +6,7 @@ namespace Submit_System.Controllers
     public class DataController : ControllerBase
     {    
         [HttpGet]
-        [Route("/")]
+        [Route("/hello")]
         public ActionResult<string> hello()
         {
             return "Hello world";
