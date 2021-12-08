@@ -7,8 +7,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace covidtracker
+namespace CovidTracker
 {
     public class Startup
     {
@@ -17,6 +18,11 @@ namespace covidtracker
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllersWithViews();
+            services.AddTransient<DataAccess>();
+            services.AddMvc(options =>
+            {
+                options.Filters.Add<ExceptionFilter>();
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -26,7 +32,6 @@ namespace covidtracker
             {
                 app.UseDeveloperExceptionPage();
             }
-
             app.UseRouting();
             // app.UseHttpsRedirection();
             app.UseEndpoints(endpoints =>

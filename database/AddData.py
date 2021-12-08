@@ -3,6 +3,9 @@ import csv
 import os
 import datetime
 import time
+from hashlib import sha1
+import random
+import string
 alternate_country_names = {
     "Russian Federation": "Russia",
     "Congo": "Congo (Brazzaville)",
@@ -35,12 +38,15 @@ alternate_country_names = {
     "Viet Nam": "Vietnam",
     "Republic of Moldova": "Moldova",
     "Republic of the Congo": "Congo (Brazzaville)",
-    "Gambia, The": "The Gambia",
-    "Bahamas, The": "The Bahamas",
+    "Gambia, The": "Gambia",
+    "Bahamas, The": "Bahamas",
+    "The Bahamas": "Bahamas",
     "United States of America": "United States",
     "Bruinei Drusalam": "Bruinei",
     "Saint BarthÃ©lemy": "Saint Barthelemy",
     "RÃ©union": "Reunion",
+    "The Gambia": "Gambia",
+    "Gambia, The": "Gambia",
     "United Republic of Tanzania": "Tanzania",
     "Syrain Arab Republic": "Syria",
     "Venezuela (Bolivarian Republic of)": "Venezuela",
@@ -65,7 +71,7 @@ alternate_country_names = {
 class CData:
     confirmed = 0
     deaths = 0
-    recovered = 0
+    recovered = None
 
 
 class CsvReader:
@@ -73,6 +79,7 @@ class CsvReader:
         self.file = open(path)
         self.reader = csv.reader(self.file)
         self.columns_names = next(self.reader)
+        self.line_num = self.reader.line_num
 
     def close(self):
         self.file.close()
@@ -92,11 +99,26 @@ def get_country_name(country):
     return country
         
 
-def get_number(num: str):
+def get_number_or_none(num: str):
+    try:
+        return int(num)
+    except:
+        return None
+
+
+def get_number_or_zero(num: str):
     try:
         return int(num)
     except:
         return 0
+
+
+def multi_execute(connection: MySQLConnection, query: str, params: list):
+        cursor = connection.cursor()
+        cursor.executemany(query, params)
+        connection.commit()
+        cursor.close()
+
 
 def get_country_info(filename: str, country_ids: dict):
     country_info = dict()
@@ -112,37 +134,40 @@ def get_country_info(filename: str, country_ids: dict):
         if country not in country_info:
             country_info[country] = CData()
         data: CData = country_info[country]
-        confirmed_cases = row["Confirmed"]
-        deaths = row["Deaths"]
-        recoveries = row["Recovered"]
-        data.confirmed += get_number(confirmed_cases)
-        data.deaths += get_number(deaths)
-        data.recovered += get_number(recoveries)
+        confirmed_cases = get_number_or_zero(row["Confirmed"])
+        deaths = get_number_or_zero(row["Deaths"])
+        recoveries = get_number_or_none(row["Recovered"])
+        data.confirmed += confirmed_cases
+        data.deaths += deaths
+        if recoveries is not None:
+            if data.recovered is None:
+                data.recovered = recoveries
+            else:
+                data.recovered += recoveries
     csv_reader.close()
     return country_info
 
 
-def execute_single_query(connection: MySQLConnection, query: str):
+def single_execute(connection: MySQLConnection, query: str, params: list = None):
+    if params is None:
+        params = []
     cursor = connection.cursor()
-    cursor.execute(query)
+    cursor.execute(query, params)
     connection.commit()
     cursor.close()
 
 
 def insert_countries(connection: MySQLConnection):
-    execute_single_query(connection, "TRUNCATE TABLE countries")
+    single_execute(connection, "TRUNCATE TABLE countries")
     query = "INSERT INTO countries (name, continent) VALUES (%s, %s)"
     path = os.path.join("datasets", "Countries-Continents.csv")
     csv_reader = CsvReader(path)
-    cursor = connection.cursor()
     countries = []
     for row in csv_reader:
         country = get_country_name(row["Country"])
         continent = row["Continent"]
         countries.append((country, continent))
-    cursor.executemany(query, countries)
-    connection.commit()
-    cursor.close()
+    multi_execute(connection, query, countries)
     csv_reader.close()
     
 
@@ -160,29 +185,29 @@ def get_country_ids(connection: MySQLConnection):
 
 
 def insert_covid_reports(connection: MySQLConnection):
-    execute_single_query(connection, "TRUNCATE TABLE disease_reports")
+    start = time.time()
+    single_execute(connection, "TRUNCATE TABLE disease_reports")
     country_ids = get_country_ids(connection)
     folder = os.path.join("datasets", "csse_covid_19_daily_reports")
     query = "INSERT INTO disease_reports (country_id, date, confirmed, deaths, recovered) VALUES (%s, %s, %s, %s, %s)"
-    discarded = set()
     for filename in os.listdir(folder):
-        cursor = connection.cursor()
         if not filename.endswith(".csv"):
             continue
         datestr = filename.replace(".csv", "")
         month, day, year = [int(a) for a in datestr.split('-')]
         date = datetime.date(year, month, day).strftime('%Y-%m-%d')
         country_info = get_country_info(os.path.join(folder, filename), country_ids)
-        varias = [(country_ids[country], date, cdata.confirmed, cdata.deaths, cdata.recovered) for country, cdata in country_info.items()]
-        cursor.executemany(query, varias)
-        connection.commit()
-        cursor.close()
+        params = []
+        for country, cdata in country_info.items():
+            params.append((country_ids[country], date, cdata.confirmed, cdata.deaths, cdata.recovered))
+        multi_execute(connection, query, params)
+    print(time.time() - start)
     
 
 
 def insert_population_reports(connection: MySQLConnection):
     relevant_years = { 2019, 2020, 2021 }
-    execute_single_query(connection, "TRUNCATE TABLE population_reports")
+    single_execute(connection, "TRUNCATE TABLE population_reports")
     path = os.path.join("datasets", "WPP2019_TotalPopulationBySex.csv")
     csv_reader = CsvReader(path)
     country_ids = get_country_ids(connection)
@@ -220,23 +245,22 @@ def insert_population_reports(connection: MySQLConnection):
         diabetes = None if row["diabetes_prevalence"] == '' else row["diabetes_prevalence"]
         params[(country_ids[country], year)] += [median, poverty, diabetes]
         visited.add((country, year))
-    cursor = connection.cursor()
-    rev_ids = { value: key for key, value in country_ids.items()}
+    for params_row in params.values():
+        if len(params_row) != 5:
+            padding = [None for i in range(5 - len(params_row))]
+            params_row += padding
     params = [tuple(list(key) + value) for key, value in params.items()]
-    cursor.executemany(query, params)
-    connection.commit()
-    cursor.close()
+    multi_execute(connection, query, params)
 
 
 def insert_vaccine_reports(connection: MySQLConnection):
-    execute_single_query(connection, "TRUNCATE TABLE vaccine_reports")
+    single_execute(connection, "TRUNCATE TABLE vaccine_reports")
     path = os.path.join("datasets", "vaccinations.csv")
     csv_reader = CsvReader(path)
     country_ids = get_country_ids(connection)
     params = []
     batch_max = 500
     query = "INSERT INTO vaccine_reports(country_id, date, vaccinated, fully_vaccinated, number_of_boosters) VALUES (%s, %s, %s, %s, %s)"
-    count = 0
     for row in csv_reader:
         country = row["location"]
         country = get_country_name(country)
@@ -246,18 +270,37 @@ def insert_vaccine_reports(connection: MySQLConnection):
         vaccinated = row["people_vaccinated"]
         if vaccinated == '':
             continue
-        fully_vaccinated = get_number(row["people_fully_vaccinated"])
-        boosters = get_number(row["total_boosters"])
+        fully_vaccinated = get_number_or_zero(row["people_fully_vaccinated"])
+        boosters = get_number_or_zero(row["total_boosters"])
         params.append((country_ids[country], date, vaccinated, fully_vaccinated, boosters))
-        count += 1
-        if count == batch_max:
-            cursor = connection.cursor()
-            cursor.executemany(query, params)
-            connection.commit()
-            cursor.close()
-            count = 0
+        if len(params) >= batch_max:
+            multi_execute(connection, query, params)
             params.clear()
+    multi_execute(connection, query, params)
     csv_reader.close()
+    single_execute(connection, "ALTER TABLE vaccine_reports ENABLE KEYS")
+
+
+def generate_hashes(connection: MySQLConnection):
+    # countries = get_country_ids(connection).keys()
+    countries = set()
+    hashes = dict()
+    hashes_rev = dict()
+    for i in range (100000):
+        num = random.randint(4, 8)
+        country = ''.join(random.choices(string.ascii_lowercase, k=num))
+        countries.add(country)
+    count = 1
+    for country in countries:
+        hash = abs(int.from_bytes(sha1(country.encode()).digest()[0:min(len(country), 4)], byteorder='big'))
+        if hash in hashes_rev:
+            print("Collision", count, country, hashes_rev[hash])
+            count += 1
+        else:
+            hashes[country] = hash
+            hashes_rev[hash] = country
+
+
 
 def main():
     # sets the current directory to this script's directory
