@@ -6,8 +6,15 @@ namespace CovidTracker
     {
         public string Name { get; set; }
         public string Continent { get; set; }
-        public List<PopulationData> PData { get; set; }
-        public List<CountryDiseaseData> DiseaseData { get; set; }
-        public List<CountryVaccineData> VaccineData { get; set; }
+        public Dictionary<string, PopulationData> PData { get; set; }
+        public List<AreaDiseaseData> DiseaseData { get; set; }
+        public List<AreaVaccineData> VaccineData { get; set; }
+    }
+
+    public class AggregatedData
+    {
+        public Dictionary<string, long> PopulationsByYear { get; set; }
+        public List<AreaDiseaseData> DiseaseData { get; set; }
+        public List<AreaVaccineData> VaccineData { get; set; }
     }
 }

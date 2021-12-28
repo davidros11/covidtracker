@@ -7,7 +7,6 @@ C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\covidtracker.r
 C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\covidtracker.dll
 C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\ref\covidtracker.dll
 C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\covidtracker.pdb
-C:\University\year 5 sem 1\data\app\covidtracker\obj\Debug\net5.0\covidtracker.csprojAssemblyReference.cache
 C:\University\year 5 sem 1\data\app\covidtracker\obj\Debug\net5.0\covidtracker.GeneratedMSBuildEditorConfig.editorconfig
 C:\University\year 5 sem 1\data\app\covidtracker\obj\Debug\net5.0\covidtracker.AssemblyInfoInputs.cache
 C:\University\year 5 sem 1\data\app\covidtracker\obj\Debug\net5.0\covidtracker.AssemblyInfo.cs
@@ -33,3 +32,5 @@ C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\System.Configu
 C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\System.Security.Cryptography.ProtectedData.dll
 C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\runtimes\win\lib\netstandard2.0\System.Security.Cryptography.ProtectedData.dll
 C:\University\year 5 sem 1\data\app\covidtracker\obj\Debug\net5.0\covidtracker.csproj.CopyComplete
+C:\University\year 5 sem 1\data\app\covidtracker\obj\Debug\net5.0\covidtracker.csproj.AssemblyReference.cache
+C:\University\year 5 sem 1\data\app\covidtracker\bin\Debug\net5.0\CsvHelper.dll

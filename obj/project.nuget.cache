@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "xl04XWQ1QcoPjb+HbRKan4xN1TlXC8ushe/v9WQkddmZFNnhKYGvL1UjSI5EpnQgf2Pf8HyoNdMt0/0+PZ3UHQ==",
+  "dgSpecHash": "EograWUfgcnwd2TmGr4F73oM30pCNQPcJskfr8kWygg/rtoP0dgibUs7afaB1Nu9j+ReLq/HDujk/hbRmkP4pw==",
   "success": true,
   "projectFilePath": "C:\\University\\year 5 sem 1\\data\\app\\covidtracker\\covidtracker.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\David\\.nuget\\packages\\bouncycastle.netcore\\1.8.5\\bouncycastle.netcore.1.8.5.nupkg.sha512",
+    "C:\\Users\\David\\.nuget\\packages\\csvhelper\\27.2.1\\csvhelper.27.2.1.nupkg.sha512",
     "C:\\Users\\David\\.nuget\\packages\\google.protobuf\\3.14.0\\google.protobuf.3.14.0.nupkg.sha512",
     "C:\\Users\\David\\.nuget\\packages\\k4os.compression.lz4\\1.2.6\\k4os.compression.lz4.1.2.6.nupkg.sha512",
     "C:\\Users\\David\\.nuget\\packages\\k4os.compression.lz4.streams\\1.2.6\\k4os.compression.lz4.streams.1.2.6.nupkg.sha512",

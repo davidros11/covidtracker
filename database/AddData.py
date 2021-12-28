@@ -4,8 +4,10 @@ import os
 import datetime
 import time
 from hashlib import sha1
-import random
-import string
+import json
+
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
+# countries sometimes have different names in the different datasets
 alternate_country_names = {
     "Russian Federation": "Russia",
     "Congo": "Congo (Brazzaville)",
@@ -26,9 +28,7 @@ alternate_country_names = {
     "West Bank and Gaza": "Israel",
     "Mainland China": "China",
     "Korea, South": "South Korea",
-    "UK": "United Kingdom", 
-    "North Ireland": "Ireland",
-    "Northern Ireland": "Ireland",
+    "UK": "United Kingdom",
     "Republic of Ireland": "Ireland",
     "St. Martin": "Saint Martin",
     "Iran (Islamic Republic of)": "Iran",
@@ -46,7 +46,6 @@ alternate_country_names = {
     "Saint BarthÃ©lemy": "Saint Barthelemy",
     "RÃ©union": "Reunion",
     "The Gambia": "Gambia",
-    "Gambia, The": "Gambia",
     "United Republic of Tanzania": "Tanzania",
     "Syrain Arab Republic": "Syria",
     "Venezuela (Bolivarian Republic of)": "Venezuela",
@@ -71,7 +70,7 @@ alternate_country_names = {
 class CData:
     confirmed = 0
     deaths = 0
-    recovered = None
+    recovered = 0
 
 
 class CsvReader:
@@ -136,14 +135,9 @@ def get_country_info(filename: str, country_ids: dict):
         data: CData = country_info[country]
         confirmed_cases = get_number_or_zero(row["Confirmed"])
         deaths = get_number_or_zero(row["Deaths"])
-        recoveries = get_number_or_none(row["Recovered"])
+        data.recovered += get_number_or_zero(row["Recovered"])
         data.confirmed += confirmed_cases
         data.deaths += deaths
-        if recoveries is not None:
-            if data.recovered is None:
-                data.recovered = recoveries
-            else:
-                data.recovered += recoveries
     csv_reader.close()
     return country_info
 
@@ -158,6 +152,10 @@ def single_execute(connection: MySQLConnection, query: str, params: list = None)
 
 
 def insert_countries(connection: MySQLConnection):
+    """ Insert countries into database from countries-continents.csv
+    Args:
+        connection (MySQLConnection)
+    """
     single_execute(connection, "TRUNCATE TABLE countries")
     query = "INSERT INTO countries (name, continent) VALUES (%s, %s)"
     path = os.path.join("datasets", "Countries-Continents.csv")
@@ -184,19 +182,33 @@ def get_country_ids(connection: MySQLConnection):
     return country_ids
 
 
+def filename_sort(item: str):
+    item = item.replace(".csv", "")
+    return datetime.datetime.strptime(item, '%m-%d-%Y').date()
+
+
 def insert_covid_reports(connection: MySQLConnection):
     start = time.time()
     single_execute(connection, "TRUNCATE TABLE disease_reports")
     country_ids = get_country_ids(connection)
     folder = os.path.join("datasets", "csse_covid_19_daily_reports")
     query = "INSERT INTO disease_reports (country_id, date, confirmed, deaths, recovered) VALUES (%s, %s, %s, %s, %s)"
-    for filename in os.listdir(folder):
+    has_recoveries = set()
+    files = [filename for filename in os.listdir(folder) if ".csv" in filename]
+    files.sort(key=filename_sort)
+    for filename in files:
         if not filename.endswith(".csv"):
             continue
         datestr = filename.replace(".csv", "")
         month, day, year = [int(a) for a in datestr.split('-')]
         date = datetime.date(year, month, day).strftime('%Y-%m-%d')
         country_info = get_country_info(os.path.join(folder, filename), country_ids)
+        for country, data in country_info.items():
+            if data.recovered == 0:
+                if country in has_recoveries:
+                    data.recovered = None
+            elif country not in has_recoveries:
+                has_recoveries.add(country)
         params = []
         for country, cdata in country_info.items():
             params.append((country_ids[country], date, cdata.confirmed, cdata.deaths, cdata.recovered))
@@ -260,6 +272,7 @@ def insert_vaccine_reports(connection: MySQLConnection):
     country_ids = get_country_ids(connection)
     params = []
     batch_max = 500
+    fully = dict()
     query = "INSERT INTO vaccine_reports(country_id, date, vaccinated, fully_vaccinated, number_of_boosters) VALUES (%s, %s, %s, %s, %s)"
     for row in csv_reader:
         country = row["location"]
@@ -271,6 +284,10 @@ def insert_vaccine_reports(connection: MySQLConnection):
         if vaccinated == '':
             continue
         fully_vaccinated = get_number_or_zero(row["people_fully_vaccinated"])
+        if fully_vaccinated != 0:
+            fully[country] = fully_vaccinated
+        elif country in fully.keys():
+            fully_vaccinated = fully[country]
         boosters = get_number_or_zero(row["total_boosters"])
         params.append((country_ids[country], date, vaccinated, fully_vaccinated, boosters))
         if len(params) >= batch_max:
@@ -281,30 +298,28 @@ def insert_vaccine_reports(connection: MySQLConnection):
     single_execute(connection, "ALTER TABLE vaccine_reports ENABLE KEYS")
 
 
-def generate_hashes(connection: MySQLConnection):
-    # countries = get_country_ids(connection).keys()
-    countries = set()
-    hashes = dict()
-    hashes_rev = dict()
-    for i in range (100000):
-        num = random.randint(4, 8)
-        country = ''.join(random.choices(string.ascii_lowercase, k=num))
-        countries.add(country)
-    count = 1
-    for country in countries:
-        hash = abs(int.from_bytes(sha1(country.encode()).digest()[0:min(len(country), 4)], byteorder='big'))
-        if hash in hashes_rev:
-            print("Collision", count, country, hashes_rev[hash])
-            count += 1
-        else:
-            hashes[country] = hash
-            hashes_rev[hash] = country
+# def generate_hashes(connection: MySQLConnection):
+#     countries = set()
+#     hashes = dict()
+#     hashes_rev = dict()
+#     for i in range (100000):
+#         num = random.randint(4, 8)
+#         country = ''.join(random.choices(string.ascii_lowercase, k=num))
+#         countries.add(country)
+#     count = 1
+#     for country in countries:
+#         hash = abs(int.from_bytes(sha1(country.encode()).digest()[0:min(len(country), 4)], byteorder='big'))
+#         if hash in hashes_rev:
+#             print("Collision", count, country, hashes_rev[hash])
+#             count += 1
+#         else:
+#             hashes[country] = hash
+#             hashes_rev[hash] = country
 
 
 
 def main():
     # sets the current directory to this script's directory
-    os.chdir(os.path.dirname(os.path.realpath(__file__)))
     start = time.time()
     connection = MySQLConnection(user='root', password='passwordius99', host='127.0.0.1', database='diseasetracker')
     insert_countries(connection)

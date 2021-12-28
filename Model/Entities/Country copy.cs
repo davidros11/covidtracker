@@ -1,18 +1,18 @@
 using System;
 namespace CovidTracker
 {
-    public class CountryDiseaseData
+    public class AreaDiseaseData
     {
         public string Date { get; set; }
         public int Confirmed { get; set; }
         public int Deaths { get; set; }
         public int? Recovered { get; set; }
     }
-    public class CountryVaccineData
+    public class AreaVaccineData
     {
         public string Date { get; set; }
-        public int Vaccinated { get; set; }
-        public int FullyVaccinated { get; set; }
+        public long Vaccinated { get; set; }
+        public long FullyVaccinated { get; set; }
         public int? Boosters { get; set; }
     }
 }
