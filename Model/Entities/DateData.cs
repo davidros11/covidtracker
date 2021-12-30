@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 namespace CovidTracker
 {
     public class CountryDateData
@@ -8,6 +9,7 @@ namespace CovidTracker
         public int ConfirmedCases { get; set; }
         public int NewCases { get; set; }
         public int Deaths { get; set; }
+        //[DefaultValue(null)]
         public int? Recovered { get; set; }
         public int Population { get; set; }
         public int Vaccinated { get; set; }

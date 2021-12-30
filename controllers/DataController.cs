@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using System.IO;
+using System.Linq;
 namespace CovidTracker
 {
     public class DataController : ControllerBase
@@ -77,6 +80,34 @@ namespace CovidTracker
             DateTime s = start ?? new DateTime(1000, 1, 1);
             DateTime e = end ?? new DateTime(2100, 1, 1);
             return HandleDatabaseOutput(_access.GetWorldData(s, e));
+        }
+        [HttpPost]
+        [Route("/Data/AddDiseaseReport")]
+        public ActionResult AddDiseaseReports([FromForm] IFormFile file)
+        {
+            string[] dateStrs = file.FileName.Replace(".csv", "").Split('-');
+            var dateNums = Array.ConvertAll(dateStrs, str => Int32.Parse(str));
+            DateTime date = new DateTime(dateNums[2], dateNums[0], dateNums[1]);    
+            using(Stream stream = file.OpenReadStream())
+            _access.InsertCovidReports(date, stream);
+            return Ok();
+        }
+        [HttpPost]
+        [Route("/Data/AddVaccineReport")]
+        public ActionResult AddVaccineReports(DateTime? date, [FromForm] IFormFile file)
+        {
+            using(Stream stream = file.OpenReadStream())
+            {
+                if(date is null)
+                {
+                    _access.InsertVaccineReports(stream);
+                }
+                else
+                {
+                    _access.InsertVaccineReports((DateTime) date, stream);
+                }
+            }
+            return Ok();
         }
     }
 }

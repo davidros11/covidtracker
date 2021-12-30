@@ -120,6 +120,7 @@ def multi_execute(connection: MySQLConnection, query: str, params: list):
 
 
 def get_country_info(filename: str, country_ids: dict):
+    start = time.time()
     country_info = dict()
     csv_reader = CsvReader(filename)
     country_region = "Country_Region"
@@ -139,6 +140,7 @@ def get_country_info(filename: str, country_ids: dict):
         data.confirmed += confirmed_cases
         data.deaths += deaths
     csv_reader.close()
+    print(time.time() - start)
     return country_info
 
 

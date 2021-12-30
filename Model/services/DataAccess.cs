@@ -6,12 +6,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Diagnostics;
+using System.Text;
+using Microsoft.VisualBasic.FileIO;
 using System.Globalization;
 namespace CovidTracker
 {
-    public class DataAccess
+    public class DataAccess : DataBaseAccess
     {
-private readonly Dictionary<string, string> AlternateCountryName = new Dictionary<string, string> {
+        private readonly Dictionary<string, string> AlternateCountryName = new Dictionary<string, string> {
             ["Russian Federation"] = "Russia",
             ["Congo"] = "Congo (Brazzaville)",
             ["DR Congo"] = "Congo (Kinshasa)",
@@ -69,26 +71,13 @@ private readonly Dictionary<string, string> AlternateCountryName = new Dictionar
             ["Syrian Arab Republic"] = "Syria",
             ["Vatican"] = "Vatican City"
         };
-
-        private static string ConnectionString;
-        public static readonly Dictionary<string, string> LongQueries;
+        private static readonly Dictionary<string, string> LongQueries;
 
         static DataAccess()
         {
-            ConnectionString = MyConfig.Configuration.GetSection("ConnectionString").Value;
             LongQueries = GetQueries();
         }
 
-        public MySqlParameter[] CopyParams(MySqlParameter[] parameters)
-        {
-            var newParams = new MySqlParameter[parameters.Length];
-            for(int i = 0; i < parameters.Length; i++)
-            {
-                var param = parameters[i];
-                newParams[i] = CreateParameter(param.ParameterName, param.MySqlDbType, param.Value);
-            }
-            return newParams;
-        }
         private static Dictionary<string, string> GetQueries()
         {
             string file = File.ReadAllText(Path.Combine("Model", "Utils", "Queries.sql"));
@@ -100,50 +89,6 @@ private readonly Dictionary<string, string> AlternateCountryName = new Dictionar
             }
             return dict;
         }
-
-        public static MySqlParameter CreateParameter(string name, MySqlDbType dbType, Object value)
-        {
-            var param = new MySqlParameter(name, dbType);
-            param.Value = value ?? DBNull.Value;
-            return param;
-        }
-        public static void SetNull(MySqlParameter[] parameters)
-        {
-            foreach(var param in parameters)
-            {
-                if(param.Value == null)
-                {
-                    param.Value = DBNull.Value;
-                }
-            }
-        }
-
-        public Object OrNull(Object obj)
-        {
-            if(obj == DBNull.Value)
-            {
-                return null;
-            }
-            return obj;
-        }
-        public T Query<T>(string sql, MySqlParameter[] parameters, Func<MySqlDataReader, T> convert) {
-            SetNull(parameters);
-            using(MySqlConnection cnn  = new MySqlConnection(ConnectionString))
-            {
-                cnn.Open();
-                using (MySqlCommand command = new MySqlCommand(sql,cnn))
-                {
-                    command.Parameters.AddRange(parameters);
-                    using(MySqlDataReader reader = command.ExecuteReader())
-                    {
-                        return convert(reader);
-                    }
-                }
-            }
-        }
-        public T Query<T>(string sql, Func<MySqlDataReader, T> convert) {
-            return Query(sql, new MySqlParameter[0], convert);
-        } 
         public List<Country> GetCountries()
         {
             string query = "SELECT * FROM countries";
@@ -451,26 +396,112 @@ private readonly Dictionary<string, string> AlternateCountryName = new Dictionar
             data.PopulationsByYear  = Query(sql, parameters, GetPopulationData);
             return data;
         }
-        public void InsertCovidReports(FileStream stream)
+        public static void BulkInsertCovid(List<StuffData> data, MySqlConnection cnn)
         {
-            var dateNums = Array.ConvertAll(stream.Name.Replace(".csv", "").Split('-'), str => Int32.Parse(str));
-            DateTime date = new DateTime(dateNums[2], dateNums[1], dateNums[0]);
-            var set = new DataTable();
-            var column = new DataColumn();
-            var dict = new Dictionary<string, CountryDateData>();
-            //using(StreamReader reader = new StreamReader(stream))
+            StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_disease_reports VALUES ");           
+            List<string> Rows = new List<string>();
+            foreach (var row in data)
+            {
+                Object recovered = row.Recovered is null ? "NULL" : row.Recovered;
+                Rows.Add(string.Format("('{0}',{1},{2},{3})",
+                row.CountryName, row.ConfirmedCases, row.Deaths, recovered));
+            }
+            sCommand.Append(string.Join(",", Rows));
+            sCommand.Append(";");
+            using (MySqlCommand myCmd = new MySqlCommand(sCommand.ToString(), cnn))
+            {
+                myCmd.CommandType = CommandType.Text;
+                myCmd.ExecuteNonQuery();
+            }
+        }
+        public static void BulkInsertVac(List<StuffVaccineData> data, MySqlConnection cnn)
+        {
+            StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_vaccine_reports VALUES ");           
+            List<string> Rows = new List<string>();
+            foreach (var row in data)
+            {
+                Rows.Add(string.Format("('{0}','{1}',{2},{3},{4})",
+                row.CountryName, row.Date.ToString("yyyy-MM-dd"), row.Vaccinated, row.FullyVaccinated, row.Boosters));
+            }
+            sCommand.Append(string.Join(",", Rows));
+            sCommand.Append(";");
+            using (MySqlCommand myCmd = new MySqlCommand(sCommand.ToString(), cnn))
+            {
+                myCmd.CommandType = CommandType.Text;
+                myCmd.ExecuteNonQuery();
+            }
+        }
+        public void InsertCovidReports(DateTime date, Stream fileStream)
+        {
+            var sw = new Stopwatch();
+            sw.Start();
+            var dict = new Dictionary<string, StuffData>();
+            using (TextFieldParser parser = new TextFieldParser(fileStream))
+            {
+                parser.TextFieldType = FieldType.Delimited;
+                parser.SetDelimiters(",");
+                var headers = parser.ReadFields();
+                var columnNames = headers.Select((str, index) => new { str = str, index = index })
+                                .ToDictionary(x => x.str, x => x.index);
+                string countryRegion = "Country_Region";
+                if(!columnNames.ContainsKey(countryRegion))
+                {
+                    countryRegion = "Country/Region";
+                }
+                while(!parser.EndOfData)
+                {
+                    var fields = parser.ReadFields();
+                    string countryName = fields[columnNames[countryRegion]];
+                    if(AlternateCountryName.ContainsKey(countryName))
+                    {
+                        countryName = AlternateCountryName[countryName];
+                    }
+                    int confirmed = Int32.Parse(fields[columnNames["Confirmed"]]);
+                    int deaths = Int32.Parse(fields[columnNames["Deaths"]]);
+                    string recoveredStr = fields[columnNames["Recovered"]];
+                    int? recovered = recoveredStr == "" ? null : Int32.Parse(recoveredStr);
+                    if(dict.ContainsKey(countryName))
+                    {
+                        dict[countryName].ConfirmedCases += confirmed;
+                        dict[countryName].Deaths += deaths;
+                        dict[countryName].Recovered = dict[countryName].Recovered is null ?
+                            recovered : dict[countryName].Recovered + recovered;
+                    }
+                    else
+                    {
+                        dict[countryName] = new StuffData {
+                            CountryName = countryName,
+                            ConfirmedCases = confirmed,
+                            Deaths = deaths,
+                            Recovered = recovered
+                        };
+                    }
+                }
+            }        
+            Debug.WriteLine("Dataset processing " + sw.Elapsed);
             using(MySqlConnection cnn  = new MySqlConnection(ConnectionString))
             {
                 cnn.Open();
-                using (MySqlTransaction transaction = cnn.BeginTransaction())
+                using(MySqlTransaction transaction = cnn.BeginTransaction())
                 {   
                     try
                     {
                         string sql = LongQueries["TempDiseaseTable"];
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
+                        command.ExecuteNonQuery();
+                        Debug.WriteLine("temp table  " + sw.Elapsed);
+                        BulkInsertCovid(dict.Values.ToList(), cnn);
+                        Debug.WriteLine("add to temp table "  + sw.Elapsed);
+                        sql = LongQueries["AddDiseaseReports"];
+                        using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         {
+                            command.Parameters.AddWithValue("@DATE", date);
                             command.ExecuteNonQuery();
                         }
+                        Debug.WriteLine("add to table " + sw.Elapsed);
+                        sql = "DROP TEMPORARY TABLE temp_disease_reports";
+                        using (MySqlCommand command = new MySqlCommand(sql, cnn))
+                        command.ExecuteNonQuery();
                         transaction.Commit();
                     }
                     catch(Exception e)
@@ -478,9 +509,104 @@ private readonly Dictionary<string, string> AlternateCountryName = new Dictionar
                         transaction.Rollback();
                         Debug.WriteLine(e.Message);
                     }
-                }
-                
+                } 
             }
+            Debug.WriteLine("Done " + sw.Elapsed);
+        }
+        public void InsertVaccineReports(Stream fileStream)
+        {
+            string sql = "SELECT DATE_SUB(MAX(date), INTERVAL 14 DAY) FROM vaccine_reports";
+            DateTime date = Query(sql, (reader) => { reader.Read(); return reader.GetDateTime(0); });
+            InsertVaccineReports(date, fileStream);
+        }
+        public void InsertVaccineReports(DateTime minDate, Stream fileStream)
+        {
+            var sw = new Stopwatch();
+            var dictus = new Dictionary<string, string>();
+            sw.Start();
+            var lst = new List<StuffVaccineData>();
+            var latest = new Dictionary<string, (int, int)>();
+            using (TextFieldParser parser = new TextFieldParser(fileStream))
+            {
+                parser.TextFieldType = FieldType.Delimited;
+                parser.SetDelimiters(",");
+                var headers = parser.ReadFields();
+                var columnNames = headers.Select((str, index) => new { str = str, index = index })
+                                .ToDictionary(x => x.str, x => x.index);
+                while(!parser.EndOfData)
+                {
+                    var fields = parser.ReadFields();
+                    string countryName = fields[columnNames["location"]];
+                    if(AlternateCountryName.ContainsKey(countryName))
+                    {
+                        countryName = AlternateCountryName[countryName];
+                    }
+                    int vaccinated;
+                    if(!Int32.TryParse(fields[columnNames["people_vaccinated"]], out vaccinated))
+                    {
+                        continue;
+                    }
+                    if(!latest.ContainsKey(countryName))
+                    {
+                        latest[countryName] = (0, 0);
+                    }
+                    int fullyVaccinated;
+                    if(!Int32.TryParse(fields[columnNames["people_fully_vaccinated"]], out fullyVaccinated))
+                    {
+                        fullyVaccinated = latest[countryName].Item1;
+                    }
+                    latest[countryName] = (fullyVaccinated, latest[countryName].Item2);
+                    int boosters;
+                    if(!Int32.TryParse(fields[columnNames["total_boosters"]], out boosters))
+                    {
+                        boosters = latest[countryName].Item2;
+                    }
+                    latest[countryName] = (fullyVaccinated, latest[countryName].Item2);
+                    DateTime date = DateTime.ParseExact(fields[columnNames["date"]], "yyyy-MM-dd", CultureInfo.InvariantCulture);
+                    if(date < minDate)
+                    {
+                        continue;
+                    }
+                    lst.Add(new StuffVaccineData {
+                        CountryName = countryName,
+                        Vaccinated = vaccinated,
+                        FullyVaccinated = fullyVaccinated,
+                        Boosters = boosters,
+                        Date = date
+                    });
+                }
+            }        
+            Debug.WriteLine("Dataset processing " + sw.Elapsed);
+            using(MySqlConnection cnn  = new MySqlConnection(ConnectionString))
+            {
+                cnn.Open();
+                using(MySqlTransaction transaction = cnn.BeginTransaction())
+                {   
+                    try
+                    {
+                        string sql = LongQueries["TempVaccineTable"];
+                        using (MySqlCommand command = new MySqlCommand(sql, cnn))
+                        command.ExecuteNonQuery();
+                        Debug.WriteLine("temp table  " + sw.Elapsed);
+                        BulkInsertVac(lst, cnn);
+                        Debug.WriteLine("add to temp table "  + sw.Elapsed);
+                        sql = LongQueries["AddVaccineReports"];
+                        using (MySqlCommand command = new MySqlCommand(sql, cnn))
+                        command.ExecuteNonQuery();
+                        Debug.WriteLine("add to table " + sw.Elapsed);
+                        sql = "DROP TEMPORARY TABLE temp_vaccine_reports";
+                        using (MySqlCommand command = new MySqlCommand(sql, cnn))
+                        command.ExecuteNonQuery();
+                        transaction.Commit();
+                    }
+                    catch(Exception e)
+                    {
+                        transaction.Rollback();
+                        Debug.WriteLine(e.Message);
+                    }
+                } 
+            }
+            Debug.WriteLine("Done " + sw.Elapsed);
         }
     }
 }

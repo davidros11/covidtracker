@@ -159,15 +159,30 @@ HAVING year BETWEEN @START AND @END
 -- create temporary table to insert disease data
 CREATE TEMPORARY TABLE `temp_disease_reports` (
   `country_name` varchar(128) NOT NULL,
-  `date` date NOT NULL,
   `confirmed` int NOT NULL,
   `deaths` int NOT NULL,
-  `recovered` int DEFAULT NULL,
+  `recovered` int DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 ---AddDiseaseReports---
 -- Add (or update if key exists) disease reports to disease_reports table from temporary table
 INSERT INTO disease_reports (country_id, date, confirmed, deaths, recovered)
 SELECT * FROM 
-(SELECT  C.id AS country_id,T.date AS date, T.confirmed AS confirmed, T.deaths AS deaths, T.recovered AS recovered
-FROM temp_disease_reports AS T JOIN countries AS C ON T.country_name = C.name) as new
+(SELECT  C.id AS country_id, @DATE, T.confirmed AS confirmed, T.deaths AS deaths, T.recovered AS recovered
+FROM temp_disease_reports AS T JOIN countries AS C ON T.country_name = C.name) AS new
 ON DUPLICATE KEY UPDATE confirmed=new.confirmed, deaths = new.deaths, recovered = new.recovered;
+---TempVaccineTable---
+-- create temporary table to insert disease data
+CREATE TEMPORARY TABLE `temp_vaccine_reports` (
+  `country_name` varchar(128) NOT NULL,
+  `date` DATE NOT NULL,
+  `vaccinated` int NOT NULL,
+  `fully_vaccinated` int NOT NULL,
+  `number_of_boosters` int NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+---AddVaccineReports---
+-- Add (or update if key exists) disease reports to disease_reports table from temporary table
+INSERT INTO vaccine_reports (country_id, date, vaccinated, fully_vaccinated, number_of_boosters)
+SELECT * FROM 
+(SELECT  C.id AS country_id, T.date AS date, T.vaccinated AS vaccinated, T.fully_vaccinated AS fully_vaccinated, T.number_of_boosters AS number_of_boosters
+FROM temp_vaccine_reports AS T JOIN countries AS C ON T.country_name = C.name) AS new
+ON DUPLICATE KEY UPDATE vaccinated=new.vaccinated, fully_vaccinated = new.fully_vaccinated, number_of_boosters = new.number_of_boosters;
