@@ -1,7 +1,7 @@
 using System;
 namespace CovidTracker
 {
-    public class StuffData
+    public class CSVCovidData
     {
         public string CountryName { get; set; }
         public int ConfirmedCases { get; set; }
@@ -9,7 +9,7 @@ namespace CovidTracker
         //[DefaultValue(null)]
         public int? Recovered { get; set; }
     }
-    public class StuffVaccineData
+    public class CSVVaccineData
     {
         public DateTime Date { get; set; }
         public string CountryName { get; set; }

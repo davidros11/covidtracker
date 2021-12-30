@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using System.IO;
 using System.Linq;
+using Microsoft.AspNetCore.Authorization;
 namespace CovidTracker
 {
     public class DataController : ControllerBase
@@ -85,6 +86,11 @@ namespace CovidTracker
         [Route("/Data/AddDiseaseReport")]
         public ActionResult AddDiseaseReports([FromForm] IFormFile file)
         {
+            string name = HttpContext.Session.GetString("name");
+            if(name == null)
+            {
+                return new StatusCodeResult(401);
+            }
             string[] dateStrs = file.FileName.Replace(".csv", "").Split('-');
             var dateNums = Array.ConvertAll(dateStrs, str => Int32.Parse(str));
             DateTime date = new DateTime(dateNums[2], dateNums[0], dateNums[1]);    
@@ -96,6 +102,11 @@ namespace CovidTracker
         [Route("/Data/AddVaccineReport")]
         public ActionResult AddVaccineReports(DateTime? date, [FromForm] IFormFile file)
         {
+            string name = HttpContext.Session.GetString("name");
+            if(name == null)
+            {
+                return new StatusCodeResult(401);
+            }
             using(Stream stream = file.OpenReadStream())
             {
                 if(date is null)

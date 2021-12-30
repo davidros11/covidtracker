@@ -396,7 +396,7 @@ namespace CovidTracker
             data.PopulationsByYear  = Query(sql, parameters, GetPopulationData);
             return data;
         }
-        public static void BulkInsertCovid(List<StuffData> data, MySqlConnection cnn)
+        public static void BulkInsertCovid(List<CSVCovidData> data, MySqlConnection cnn)
         {
             StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_disease_reports VALUES ");           
             List<string> Rows = new List<string>();
@@ -414,7 +414,7 @@ namespace CovidTracker
                 myCmd.ExecuteNonQuery();
             }
         }
-        public static void BulkInsertVac(List<StuffVaccineData> data, MySqlConnection cnn)
+        public static void BulkInsertVac(List<CSVVaccineData> data, MySqlConnection cnn)
         {
             StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_vaccine_reports VALUES ");           
             List<string> Rows = new List<string>();
@@ -435,7 +435,7 @@ namespace CovidTracker
         {
             var sw = new Stopwatch();
             sw.Start();
-            var dict = new Dictionary<string, StuffData>();
+            var dict = new Dictionary<string, CSVCovidData>();
             using (TextFieldParser parser = new TextFieldParser(fileStream))
             {
                 parser.TextFieldType = FieldType.Delimited;
@@ -469,7 +469,7 @@ namespace CovidTracker
                     }
                     else
                     {
-                        dict[countryName] = new StuffData {
+                        dict[countryName] = new CSVCovidData {
                             CountryName = countryName,
                             ConfirmedCases = confirmed,
                             Deaths = deaths,
@@ -524,7 +524,7 @@ namespace CovidTracker
             var sw = new Stopwatch();
             var dictus = new Dictionary<string, string>();
             sw.Start();
-            var lst = new List<StuffVaccineData>();
+            var lst = new List<CSVVaccineData>();
             var latest = new Dictionary<string, (int, int)>();
             using (TextFieldParser parser = new TextFieldParser(fileStream))
             {
@@ -567,7 +567,7 @@ namespace CovidTracker
                     {
                         continue;
                     }
-                    lst.Add(new StuffVaccineData {
+                    lst.Add(new CSVVaccineData {
                         CountryName = countryName,
                         Vaccinated = vaccinated,
                         FullyVaccinated = fullyVaccinated,

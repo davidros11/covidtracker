@@ -3,9 +3,10 @@ import csv
 import os
 import datetime
 import time
-from hashlib import sha1
+from hashlib import pbkdf2_hmac
 import json
-
+from base64 import b64encode
+import secrets
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 # countries sometimes have different names in the different datasets
 alternate_country_names = {
@@ -324,12 +325,17 @@ def main():
     # sets the current directory to this script's directory
     start = time.time()
     connection = MySQLConnection(user='root', password='passwordius99', host='127.0.0.1', database='diseasetracker')
-    insert_countries(connection)
-    insert_covid_reports(connection)
-    insert_population_reports(connection)
-    insert_vaccine_reports(connection)
+    # insert_countries(connection)
+    # insert_covid_reports(connection)
+    # insert_population_reports(connection)
+    # insert_vaccine_reports(connection)
+    salt = secrets.token_bytes(12)
+    iter = 100000
+    password = pbkdf2_hmac('sha1', b'password', salt, iter, dklen=20)
+    hash = b64encode(password).decode() + '$' + b64encode(salt).decode() + '$' + str(iter)
+    single_execute(connection, "TRUNCATE TABLE managers")
+    single_execute(connection, f"INSERT INTO managers (name, password) VALUES ('Yosi', '{hash}')")
     connection.close()
-    print(round(time.time() - start), "seconds")
 
 
 main()

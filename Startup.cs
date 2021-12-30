@@ -19,9 +19,16 @@ namespace CovidTracker
         {
             services.AddControllersWithViews();
             services.AddTransient<DataAccess>();
+            services.AddTransient<UserAccess>();
             services.AddMvc(options =>
             {
                 options.Filters.Add<ExceptionFilter>();
+            });
+            services.AddSession(options =>
+            {
+                options.IdleTimeout = TimeSpan.FromMinutes(60);
+                options.Cookie.HttpOnly = true;
+                options.Cookie.IsEssential = true;
             });
         }
 
@@ -33,6 +40,9 @@ namespace CovidTracker
                 app.UseDeveloperExceptionPage();
             }
             app.UseRouting();
+            app.UseSession();
+            app.UseAuthentication();
+            app.UseAuthorization();
             // app.UseHttpsRedirection();
             app.UseEndpoints(endpoints =>
             {

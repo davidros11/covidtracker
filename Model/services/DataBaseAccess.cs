@@ -35,6 +35,10 @@ namespace CovidTracker
             param.Value = value ?? DBNull.Value;
             return param;
         }
+        public static MySqlParameter[] ParametersList(params MySqlParameter[] parameters)
+        {
+            return parameters;
+        }
         public static void SetNull(MySqlParameter[] parameters)
         {
             foreach(var param in parameters)
