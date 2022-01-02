@@ -92,7 +92,10 @@ class CsvReader:
         return { self.columns_names[i]: cell for i, cell in enumerate(row) }
 
 
-def get_country_name(country):
+def get_country_name(country: str):
+    """
+    Standardizes the country names from different datasets
+    """
     country = country.replace('*', '').strip()
     if country in alternate_country_names:
         return alternate_country_names[country]
@@ -113,6 +116,7 @@ def get_number_or_zero(num: str):
         return 0
 
 
+# Execute multiple sql commands
 def multi_execute(connection: MySQLConnection, query: str, params: list):
         cursor = connection.cursor()
         cursor.executemany(query, params)
@@ -120,6 +124,7 @@ def multi_execute(connection: MySQLConnection, query: str, params: list):
         cursor.close()
 
 
+# Get information from a single file in the CSSE dataset
 def get_country_info(filename: str, country_ids: dict):
     country_info = dict()
     csv_reader = CsvReader(filename)
@@ -143,6 +148,7 @@ def get_country_info(filename: str, country_ids: dict):
     return country_info
 
 
+# executes a single SQL command
 def single_execute(connection: MySQLConnection, query: str, params: list = None):
     if params is None:
         params = []
@@ -152,6 +158,7 @@ def single_execute(connection: MySQLConnection, query: str, params: list = None)
     cursor.close()
 
 
+# inserts all countries into the database
 def insert_countries(connection: MySQLConnection):
     """ Insert countries into database from countries-continents.csv
     Args:
@@ -170,6 +177,7 @@ def insert_countries(connection: MySQLConnection):
     csv_reader.close()
     
 
+# get country ids from the database
 def get_country_ids(connection: MySQLConnection):
     country_ids = dict()
     cursor = connection.cursor()
@@ -183,11 +191,13 @@ def get_country_ids(connection: MySQLConnection):
     return country_ids
 
 
+# sorts the file names by the date in their name
 def filename_sort(item: str):
     item = item.replace(".csv", "")
     return datetime.datetime.strptime(item, '%m-%d-%Y').date()
 
 
+# inserts the CSSE dataset into the database
 def insert_covid_reports(connection: MySQLConnection):
     single_execute(connection, "TRUNCATE TABLE disease_reports")
     country_ids = get_country_ids(connection)
@@ -216,7 +226,9 @@ def insert_covid_reports(connection: MySQLConnection):
     
 
 
+# inserts the population data into the database
 def insert_population_reports(connection: MySQLConnection):
+    # all years whose demogrpahic data should be inserted into the database
     relevant_years = { 2020, 2021, 2022 }
     single_execute(connection, "TRUNCATE TABLE population_reports")
     path = os.path.join("datasets", "WPP2019_TotalPopulationBySex.csv")
@@ -238,6 +250,7 @@ def insert_population_reports(connection: MySQLConnection):
         density = float(row["PopDensity"])
         params[(country_ids[country], year)] = [population, density]
     csv_reader.close()
+    # contains additional demographic data
     path = os.path.join("datasets", "owid-covid-data.csv")
     csv_reader = CsvReader(path)
     visited = set()
@@ -254,8 +267,6 @@ def insert_population_reports(connection: MySQLConnection):
         median = None if row["median_age"] == '' else float(row["median_age"])
         poverty = None if row["extreme_poverty"] == '' else row["extreme_poverty"]
         diabetes = None if row["diabetes_prevalence"] == '' else row["diabetes_prevalence"]
-        # if (country_ids[country], year) not in params.keys():
-        #     continue
         params[(country_ids[country], year)] += [median, poverty, diabetes]
         visited.add((country, year))
     for params_row in params.values():
@@ -266,6 +277,7 @@ def insert_population_reports(connection: MySQLConnection):
     multi_execute(connection, query, params)
 
 
+# inserts the Owid vaccine data into the database
 def insert_vaccine_reports(connection: MySQLConnection):
     single_execute(connection, "TRUNCATE TABLE vaccine_reports")
     path = os.path.join("datasets", "vaccinations.csv")
@@ -299,26 +311,6 @@ def insert_vaccine_reports(connection: MySQLConnection):
     single_execute(connection, "ALTER TABLE vaccine_reports ENABLE KEYS")
 
 
-# def generate_hashes(connection: MySQLConnection):
-#     countries = set()
-#     hashes = dict()
-#     hashes_rev = dict()
-#     for i in range (100000):
-#         num = random.randint(4, 8)
-#         country = ''.join(random.choices(string.ascii_lowercase, k=num))
-#         countries.add(country)
-#     count = 1
-#     for country in countries:
-#         hash = abs(int.from_bytes(sha1(country.encode()).digest()[0:min(len(country), 4)], byteorder='big'))
-#         if hash in hashes_rev:
-#             print("Collision", count, country, hashes_rev[hash])
-#             count += 1
-#         else:
-#             hashes[country] = hash
-#             hashes_rev[hash] = country
-
-
-
 def main():
     # sets the current directory to this script's directory
     start = time.time()
@@ -327,15 +319,15 @@ def main():
     insert_covid_reports(connection)
     insert_population_reports(connection)
     insert_vaccine_reports(connection)
+    # adds a managaer into the database called Yosi
     salt = secrets.token_bytes(12)
     iter = 100000
     password = pbkdf2_hmac('sha1', b'password', salt, iter, dklen=20)
     hash = b64encode(password).decode() + '$' + b64encode(salt).decode() + '$' + str(iter)
     single_execute(connection, "TRUNCATE TABLE managers")
-    single_execute(connection, f"INSERT INTO managers (name, password) VALUES ('Yosi', '{hash}')")
+    single_execute(connection, "INSERT INTO managers (name, password) VALUES ('Yosi', %s)", [hash])
     connection.close()
     print(round(time.time() - start), "seconds")
     
-
 
 main()
