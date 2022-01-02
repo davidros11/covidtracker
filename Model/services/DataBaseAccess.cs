@@ -17,7 +17,11 @@ namespace CovidTracker
         {
             ConnectionString = MyConfig.Configuration.GetSection("ConnectionString").Value;
         }
-
+        /// <summary>
+        /// Makes a copy of an array of MySqlParameters so they can be used in another query
+        /// </summary>
+        /// <param name="parameters">the original MySqlParameter array</param>
+        /// <returns>>the new MySqlParameter array</returns>
         public MySqlParameter[] CopyParams(MySqlParameter[] parameters)
         {
             var newParams = new MySqlParameter[parameters.Length];
@@ -28,17 +32,22 @@ namespace CovidTracker
             }
             return newParams;
         }
-
+        /// <summary>
+        /// Create a MySqlParameter
+        /// </summary>
+        /// <param name="name">parameter name</param>
+        /// <param name="dbType">parameter type</param>
+        /// <param name="value">parameter value</param>
+        /// <returns>the MySqlParameter</returns>
         public static MySqlParameter CreateParameter(string name, MySqlDbType dbType, Object value)
         {
             var param = new MySqlParameter(name, dbType);
             param.Value = value ?? DBNull.Value;
             return param;
         }
-        public static MySqlParameter[] ParametersList(params MySqlParameter[] parameters)
-        {
-            return parameters;
-        }
+        /// <summary>
+        /// Sets all parameters with value null to DBNull
+        /// </summary>
         public static void SetNull(MySqlParameter[] parameters)
         {
             foreach(var param in parameters)
@@ -49,7 +58,11 @@ namespace CovidTracker
                 }
             }
         }
-
+        /// <summary>
+        /// If the object is DBNull, converts it to null
+        /// </summary>
+        /// <param name="obj">the object</param>
+        /// <returns>the object, or null</returns>
         public Object OrNull(Object obj)
         {
             if(obj == DBNull.Value)
@@ -58,18 +71,14 @@ namespace CovidTracker
             }
             return obj;
         }
-        public void NonQuery(string sql, MySqlParameter[] parameters)
-        {
-            using(MySqlConnection cnn  = new MySqlConnection(ConnectionString))
-            {
-                cnn.Open();
-                using (MySqlCommand command = new MySqlCommand(sql,cnn))
-                {
-                    command.Parameters.AddRange(parameters);
-                    command.ExecuteNonQuery();
-                }
-            }
-        }
+        /// <summary>
+        /// Performs a MySql query and returns the results.
+        /// </summary>
+        /// <param name="sql">the SQL command string</param>
+        /// <param name="parameters">the parameters for the command</param>
+        /// <param name="convert">a function that takes the data from the MySqlDataReader and converts it into the desired object</param>
+        /// <typeparam name="T">The type of object that should be returned</typeparam>
+        /// <returns>The query results put inside the given object type</returns>
         public T Query<T>(string sql, MySqlParameter[] parameters, Func<MySqlDataReader, T> convert) {
             SetNull(parameters);
             using(MySqlConnection cnn  = new MySqlConnection(ConnectionString))
@@ -85,6 +94,9 @@ namespace CovidTracker
                 }
             }
         }
+        /// <summary>
+        /// Overload of Query without parametrs
+        /// </summary>
         public T Query<T>(string sql, Func<MySqlDataReader, T> convert) {
             return Query(sql, new MySqlParameter[0], convert);
         } 

@@ -14,19 +14,14 @@ namespace CovidTracker
         {
             _access = access;
         }
-        [NonAction]
-        private ActionResult<T> HandleDatabaseOutput<T>(T Output)
-        {
-            if(Output == null)
-            {
-                return NotFound();
-            }
-            return Output;
-        }
         [HttpPost]
         [Route("/User/Login")]
         public ActionResult Login([FromBody] Login login) 
         {
+            if(login?.Password is null || login?.Name is null)
+            {
+                return BadRequest();
+            }
             bool success = _access.AuthenticateUser(login);
             if(!success)
             {

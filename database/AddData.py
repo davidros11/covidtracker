@@ -1,3 +1,4 @@
+from posixpath import pardir
 from mysql.connector.connection import MySQLConnection
 import csv
 import os
@@ -26,7 +27,6 @@ alternate_country_names = {
     "Holy See": "Vatican City",
     "Macedonia": "North Macedonia",
     "Timor-Leste": "East Timor",
-    "West Bank and Gaza": "Israel",
     "Mainland China": "China",
     "Korea, South": "South Korea",
     "UK": "United Kingdom",
@@ -121,7 +121,6 @@ def multi_execute(connection: MySQLConnection, query: str, params: list):
 
 
 def get_country_info(filename: str, country_ids: dict):
-    start = time.time()
     country_info = dict()
     csv_reader = CsvReader(filename)
     country_region = "Country_Region"
@@ -141,7 +140,6 @@ def get_country_info(filename: str, country_ids: dict):
         data.confirmed += confirmed_cases
         data.deaths += deaths
     csv_reader.close()
-    print(time.time() - start)
     return country_info
 
 
@@ -191,7 +189,6 @@ def filename_sort(item: str):
 
 
 def insert_covid_reports(connection: MySQLConnection):
-    start = time.time()
     single_execute(connection, "TRUNCATE TABLE disease_reports")
     country_ids = get_country_ids(connection)
     folder = os.path.join("datasets", "csse_covid_19_daily_reports")
@@ -216,12 +213,11 @@ def insert_covid_reports(connection: MySQLConnection):
         for country, cdata in country_info.items():
             params.append((country_ids[country], date, cdata.confirmed, cdata.deaths, cdata.recovered))
         multi_execute(connection, query, params)
-    print(time.time() - start)
     
 
 
 def insert_population_reports(connection: MySQLConnection):
-    relevant_years = { 2019, 2020, 2021 }
+    relevant_years = { 2020, 2021, 2022 }
     single_execute(connection, "TRUNCATE TABLE population_reports")
     path = os.path.join("datasets", "WPP2019_TotalPopulationBySex.csv")
     csv_reader = CsvReader(path)
@@ -258,6 +254,8 @@ def insert_population_reports(connection: MySQLConnection):
         median = None if row["median_age"] == '' else float(row["median_age"])
         poverty = None if row["extreme_poverty"] == '' else row["extreme_poverty"]
         diabetes = None if row["diabetes_prevalence"] == '' else row["diabetes_prevalence"]
+        # if (country_ids[country], year) not in params.keys():
+        #     continue
         params[(country_ids[country], year)] += [median, poverty, diabetes]
         visited.add((country, year))
     for params_row in params.values():
@@ -324,11 +322,11 @@ def insert_vaccine_reports(connection: MySQLConnection):
 def main():
     # sets the current directory to this script's directory
     start = time.time()
-    connection = MySQLConnection(user='root', password='passwordius99', host='127.0.0.1', database='diseasetracker')
-    # insert_countries(connection)
-    # insert_covid_reports(connection)
-    # insert_population_reports(connection)
-    # insert_vaccine_reports(connection)
+    connection = MySQLConnection(user='team11', password='0011', host='localhost', database='db11')
+    insert_countries(connection)
+    insert_covid_reports(connection)
+    insert_population_reports(connection)
+    insert_vaccine_reports(connection)
     salt = secrets.token_bytes(12)
     iter = 100000
     password = pbkdf2_hmac('sha1', b'password', salt, iter, dklen=20)
@@ -336,6 +334,8 @@ def main():
     single_execute(connection, "TRUNCATE TABLE managers")
     single_execute(connection, f"INSERT INTO managers (name, password) VALUES ('Yosi', '{hash}')")
     connection.close()
+    print(round(time.time() - start), "seconds")
+    
 
 
 main()

@@ -13,6 +13,7 @@ namespace CovidTracker
 {
     public class DataAccess : DataBaseAccess
     {
+        // Some countries may show different names in different datasets
         private readonly Dictionary<string, string> AlternateCountryName = new Dictionary<string, string> {
             ["Russian Federation"] = "Russia",
             ["Congo"] = "Congo (Brazzaville)",
@@ -75,9 +76,13 @@ namespace CovidTracker
 
         static DataAccess()
         {
+            // Loads queries into this field
             LongQueries = GetQueries();
         }
-
+        /// <summary>
+        /// Loads the queries from the Queries.sql file
+        /// </summary>
+        /// <returns>key-query dictionary</returns>
         private static Dictionary<string, string> GetQueries()
         {
             string file = File.ReadAllText(Path.Combine("Model", "Utils", "Queries.sql"));
@@ -89,6 +94,10 @@ namespace CovidTracker
             }
             return dict;
         }
+        /// <summary>
+        /// Returns all countries, with id, name and continent
+        /// </summary>
+        /// <returns>List of countries</returns>
         public List<Country> GetCountries()
         {
             string query = "SELECT * FROM countries";
@@ -108,7 +117,12 @@ namespace CovidTracker
             };
             return Query(query, converter);
         }
-        public List<CountryDateData> GetDateData(DateTime date, int threshold)
+        /// <summary>
+        /// Get the covid data for all countries for the given date
+        /// </summary>
+        /// <param name="date">the given date</param>
+        /// <param name="threshold">number of days for new cases</param>
+        public List<CountryDateData> GetCountryDateData(DateTime date, int threshold)
         {
             string query = LongQueries["CountriesByDate"];
             MySqlParameter[] parameters = { 
@@ -139,6 +153,11 @@ namespace CovidTracker
             };
             return Query(query, parameters,converter);
         }
+        /// <summary>
+        /// Get the covid data for all continents for the given date
+        /// </summary>
+        /// <param name="date">the given date</param>
+        /// <param name="threshold">number of days for new cases</param>
         public List<ContinentDateData> GetContinentDateData(DateTime date, int threshold)
         {
             string query = LongQueries["ContinentsByDate"];
@@ -169,6 +188,11 @@ namespace CovidTracker
             };
             return Query(query, parameters,converter);
         }
+        /// <summary>
+        /// Get the covid data for the world for the given date
+        /// </summary>
+        /// <param name="date">the given date</param>
+        /// <param name="threshold">number of days for new cases</param>
         public WorldDateData GetWorldData(DateTime date, int threshold)
         {
             string query = LongQueries["WorldByDate"];
@@ -196,6 +220,10 @@ namespace CovidTracker
             };
             return Query(query, parameters,converter);
         }
+        /// <summary>
+        /// Get the covid vaccine data from the data reader
+        /// </summary>
+        /// <param name="reader"></param>
         private List<AreaVaccineData> GetAreaVaccineData(MySqlDataReader reader) {
             var lst = new List<AreaVaccineData>();
             while(reader.Read())
@@ -211,16 +239,14 @@ namespace CovidTracker
             }
             return lst;
         }
+        /// <summary>
+        /// Get the covid data from the data reader
+        /// </summary>
+        /// <param name="reader"></param>
         private List<AreaDiseaseData> AreaDiseaseData(MySqlDataReader reader)  {
             var lst = new List<AreaDiseaseData>();
-            //int i = 0;
             while(reader.Read())
             {
-                // i++;
-                // if (i % 2 == 0)
-                // {
-                //     continue;
-                // }
                 var data = new AreaDiseaseData
                 {
                     Date = reader.GetDateTime(0).ToString("yyyy-MM-dd"),
@@ -233,8 +259,15 @@ namespace CovidTracker
             }
             return lst;
         }
+        /// <summary>
+        /// Get covid data for a specific country
+        /// </summary>
+        /// <param name="countryID"></param>
+        /// <param name="start">earliest date for data</param>
+        /// <param name="end">latest date for data</param>
         public CountryData GetCountryData(int countryID, DateTime start, DateTime end)
         {
+            // country and continent name
             string sql = "SELECT name, continent FROM countries WHERE id=@ID";
             MySqlParameter[] parameters = { 
                 CreateParameter("@ID", MySqlDbType.Int32, countryID),
@@ -253,6 +286,7 @@ namespace CovidTracker
             };
             CountryData data = Query(sql, parameters,converter);
             if(data is null) { return null; }
+            // covid data
             sql = "SELECT date, confirmed, deaths, recovered FROM disease_reports WHERE country_id = @ID AND date BETWEEN @START AND @END";
             parameters = new MySqlParameter[] { 
                 CreateParameter("@ID", MySqlDbType.Int32, countryID),
@@ -260,9 +294,11 @@ namespace CovidTracker
                 CreateParameter("@END", MySqlDbType.Date, end)
             };
             data.DiseaseData = Query(sql, parameters, AreaDiseaseData);
+            // vaccine data
             sql = "SELECT date, vaccinated, fully_vaccinated, number_of_boosters FROM vaccine_reports WHERE country_id = @ID AND date BETWEEN @START AND @END";
             parameters = CopyParams(parameters);
             data.VaccineData = Query(sql, parameters, GetAreaVaccineData);
+            // population data
              sql = @"SELECT year, population, density, median_age, poverty_rate, diabetes_rate FROM population_reports WHERE country_id = @ID
                         AND year BETWEEN YEAR(@START) AND YEAR(@END) ORDER BY year";
             parameters = CopyParams(parameters);
@@ -273,7 +309,6 @@ namespace CovidTracker
                     string year = reader.GetValue(0).ToString();
                     var data = new PopulationData
                     {
-                        
                         Population = reader.GetInt32(1),
                         Density = reader.GetFloat(2),
                         MedianAge = (float?) OrNull(reader.GetValue(3)),
@@ -287,8 +322,11 @@ namespace CovidTracker
             data.PData = Query(sql, parameters, GetPopulationData);
             return data;
         }
-        
-        public Dictionary<string, DemographicData> GetPopulationData(int year)
+        /// <summary>
+        /// Get demographic data for each country
+        /// </summary>
+        /// <param name="year">year for the information</param>
+        public Dictionary<string, DemographicData> GetDemographicData(int year)
         {
             string sql = "SELECT country_id, density, median_age, poverty_rate, diabetes_rate FROM population_reports WHERE year=@YEAR";
             MySqlParameter[] parameters = { CreateParameter("@YEAR", MySqlDbType.Int32, year) };
@@ -310,11 +348,16 @@ namespace CovidTracker
             };
             return Query(sql, parameters, GetPopulationData);
         }
+        /// <summary>
+        /// Gets vaccine data for a continent or the world
+        /// </summary>
+        /// <param name="reader"></param>
         private List<AreaVaccineData> MacroVaccineData(MySqlDataReader reader)
         {
             int numOfParts = 2;
             var lst = new List<AreaVaccineData>();
-            var dict = new Dictionary<int, AreaVaccineData>();
+            // We store the data from the latest entry for each country here to make sure each country is encluded in the aggregation
+            var latest = new Dictionary<int, AreaVaccineData>();
             int lastPart = -1;
             DateTime currentDate = DateTime.MinValue;
             while(reader.Read())
@@ -327,16 +370,16 @@ namespace CovidTracker
                 {
                     var data = new AreaVaccineData {
                         Date = $"{currentDate.Year}-{currentDate.Month}-{currentDate.Day}",
-                        Vaccinated = dict.Values.Sum((data) => data.Vaccinated),
-                        FullyVaccinated = dict.Values.Sum((data) => data.FullyVaccinated),
-                        Boosters = dict.Values.Sum((data) => data.Boosters)
+                        Vaccinated = latest.Values.Sum((data) => data.Vaccinated),
+                        FullyVaccinated = latest.Values.Sum((data) => data.FullyVaccinated),
+                        Boosters = latest.Values.Sum((data) => data.Boosters)
                     };
                     lst.Add(data);
                 }
                 lastPart = part;
                 int day = DateTime.DaysInMonth(year, month)*part/numOfParts;
                 currentDate = new DateTime(year, month, day);
-                dict[id] = new AreaVaccineData {
+                latest[id] = new AreaVaccineData {
                     Vaccinated = reader.GetInt64(4),
                     FullyVaccinated = reader.GetInt64(5),
                     Boosters = reader.GetInt32(6)
@@ -344,7 +387,12 @@ namespace CovidTracker
             }
             return lst;
         }
-        public Dictionary<string, long> GetPopulationData(MySqlDataReader reader)
+        /// <summary>
+        /// Gets the population for each year for a country, continent or the world
+        /// </summary>
+        /// <param name="reader"></param>
+        /// <returns></returns>
+        private Dictionary<string, long> GetPopulationData(MySqlDataReader reader)
         {
             var dict = new Dictionary<string, long>();
             while(reader.Read())
@@ -353,6 +401,12 @@ namespace CovidTracker
             }
             return dict;
         }
+         /// <summary>
+        /// Get covid data for a specific continent
+        /// </summary>
+        /// <param name="name">continent name</param>
+        /// <param name="start">earliest date for data</param>
+        /// <param name="end">latest date for data</param>
         public AggregatedData GetContinentData(string name, DateTime start, DateTime end)
         {
             var data = new AggregatedData();
@@ -375,6 +429,11 @@ namespace CovidTracker
             data.PopulationsByYear  = Query(sql, parameters, GetPopulationData);
             return data;
         }
+         /// <summary>
+        /// Get covid data for the world
+        /// </summary>
+        /// <param name="start">earliest date for data</param>
+        /// <param name="end">latest date for data</param>
         public AggregatedData GetWorldData(DateTime start, DateTime end)
         {
             var data = new AggregatedData();
@@ -396,6 +455,10 @@ namespace CovidTracker
             data.PopulationsByYear  = Query(sql, parameters, GetPopulationData);
             return data;
         }
+        /// <summary>
+        /// Insert covid reports in bulk to a temporary table
+        /// </summary>
+        /// <param name="data">the data</param>
         public static void BulkInsertCovid(List<CSVCovidData> data, MySqlConnection cnn)
         {
             StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_disease_reports VALUES ");           
@@ -414,6 +477,12 @@ namespace CovidTracker
                 myCmd.ExecuteNonQuery();
             }
         }
+         /// <summary>
+        /// Get covid data for a specific country
+        /// </summary>
+        /// <param name="countryID"></param>
+        /// <param name="start">earliest date for data</param>
+        /// <param name="end">latest date for data</param>
         public static void BulkInsertVac(List<CSVVaccineData> data, MySqlConnection cnn)
         {
             StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_vaccine_reports VALUES ");           
@@ -519,6 +588,11 @@ namespace CovidTracker
             DateTime date = Query(sql, (reader) => { reader.Read(); return reader.GetDateTime(0); });
             InsertVaccineReports(date, fileStream);
         }
+        /// <summary>
+        /// Inserts vaccine data from a CSV file into the database
+        /// </summary>
+        /// <param name="minDate">only data from at least this date will be inserted</param>
+        /// <param name="fileStream">stream for the CSV file</param>
         public void InsertVaccineReports(DateTime minDate, Stream fileStream)
         {
             var sw = new Stopwatch();
@@ -531,6 +605,7 @@ namespace CovidTracker
                 parser.TextFieldType = FieldType.Delimited;
                 parser.SetDelimiters(",");
                 var headers = parser.ReadFields();
+                // get all the field names
                 var columnNames = headers.Select((str, index) => new { str = str, index = index })
                                 .ToDictionary(x => x.str, x => x.index);
                 while(!parser.EndOfData)
@@ -584,16 +659,19 @@ namespace CovidTracker
                 {   
                     try
                     {
+                        // create a temporary table to store the data to make it faster to attach the country id
                         string sql = LongQueries["TempVaccineTable"];
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         command.ExecuteNonQuery();
                         Debug.WriteLine("temp table  " + sw.Elapsed);
                         BulkInsertVac(lst, cnn);
                         Debug.WriteLine("add to temp table "  + sw.Elapsed);
+                        // add the vaccine reports to the vaccine_reports table
                         sql = LongQueries["AddVaccineReports"];
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         command.ExecuteNonQuery();
                         Debug.WriteLine("add to table " + sw.Elapsed);
+                        // get rid of the temporary table
                         sql = "DROP TEMPORARY TABLE temp_vaccine_reports";
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         command.ExecuteNonQuery();

@@ -15,27 +15,35 @@ namespace CovidTracker
     {
         private const string SEP = "$";
         private const string FORMAT = "{0}" + SEP + "{1}" + SEP +"{2}";
+        /// <summary>
+        /// Checks if the user and password match
+        /// </summary>
+        /// <param name="login">login data</param>
+        /// <returns>true if they match, false otherwise</returns>
         public bool AuthenticateUser(Login login)
         {
-            string sql = "SELECT id, name, password FROM managers WHERE name=@NAME";
+            string sql = "SELECT password FROM managers WHERE name=@NAME";
             MySqlParameter[] parameters = { CreateParameter("@NAME", MySqlDbType.VarChar, login.Name) };
-            User user = Query(sql, parameters, (reader) => {
+            string hash = Query(sql, parameters, (reader) => {
                 if(!reader.Read())
                 {
                     return null;
                 }
-                return new User {
-                    ID = reader.GetInt32(0),
-                    Name = reader.GetString(1),
-                    PasswordHash = reader.GetString(2)
-                };
+                return reader.GetString(0);
             });
-            if(user == null)
+            if(hash == null)
             {
                 return false;
             }
-            return KDFVerify(login.Password, user.PasswordHash);
+            return Verify(login.Password, hash);
         }
+        /// <summary>
+        /// Hashes a password using PBKDF2-HMAC-SHA1
+        /// </summary>
+        /// <param name="password">password string</param>
+        /// <param name="salt">salt</param>
+        /// <param name="iter">number of iterations</param>
+        /// <returns>Hash in Base64 form</returns>
         private static string Hash(string password, byte[] salt, int iter)
         {
             byte[] hash;
@@ -51,7 +59,7 @@ namespace CovidTracker
         /// <param name="password">The input password</param>
         /// <param name="storedHash">The database hash</param>
         /// <returns>True if they equal, false otherwise</returns>
-        public static bool KDFVerify(string password, string storedHash)
+        public static bool Verify(string password, string storedHash)
         {
             string[] components = storedHash.Split(SEP);
             if(components.Length != 3) { return false; }

@@ -3,6 +3,7 @@ CREATE TABLE `countries` (
   `name` varchar(60) NOT NULL,
   `continent` varchar(45) NOT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY  (`name`),
   KEY `cont` (`continent`)
 ) ENGINE=InnoDB AUTO_INCREMENT=189 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -20,7 +21,8 @@ CREATE TABLE `managers` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(128) NOT NULL,
   `password` varchar(64) NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`name`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `population_reports` (

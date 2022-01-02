@@ -12,7 +12,7 @@ SELECT
     C.id,
     C.name,
     DR.confirmed,
-    DR.confirmed - Prev.confirmed AS new_cases,
+    DR.confirmed - COALESCE(Prev.confirmed, 0) AS new_cases,
     DR.recovered,
     DR.deaths,
     PR.population,
@@ -25,7 +25,7 @@ JOIN countries as C
 JOIN population_reports AS PR
     ON PR.year = YEAR(@DATE)
     AND PR.country_id = DR.country_id
-JOIN disease_reports AS Prev ON Prev.country_id = DR.country_id AND Prev.date = DATE_SUB(@DATE, INTERVAL @TH DAY)
+LEFT JOIN disease_reports AS Prev ON Prev.country_id = DR.country_id AND Prev.date = DATE_SUB(@DATE, INTERVAL @TH DAY)
 LEFT JOIN VR
     ON VR.country_id = DR.country_id
 ---WorldByDate---
@@ -40,7 +40,7 @@ WITH
         )
 SELECT
     SUM(DR.confirmed),
-    SUM(DR.confirmed) - (SELECT SUM(confirmed) FROM disease_reports WHERE date = DATE_SUB(@DATE, INTERVAL @TH DAY)) AS new_cases,
+    SUM(DR.confirmed) - COALESCE((SELECT SUM(confirmed) FROM disease_reports WHERE date = DATE_SUB(@DATE, INTERVAL @TH DAY)), 0) AS new_cases,
     SUM(COALESCE(DR.recovered, 0)),
     SUM(DR.deaths),
     (SELECT SUM(population) FROM population_reports WHERE year = YEAR(@DATE)),
@@ -63,7 +63,7 @@ WITH
 SELECT
     C.continent,
     SUM(DR.confirmed),
-    SUM(DR.confirmed) - SUM(Prev.confirmed) AS new_cases,
+    SUM(DR.confirmed) - COALESCE(SUM(Prev.confirmed), 0) AS new_cases,
     SUM(COALESCE(DR.recovered, 0)),
     SUM(DR.deaths),
     SUM(PR.population),
@@ -76,7 +76,7 @@ JOIN countries as C
 JOIN population_reports AS PR
     ON PR.year = YEAR(@DATE)
     AND PR.country_id = DR.country_id
-JOIN disease_reports AS Prev ON Prev.country_id = DR.country_id AND Prev.date = DATE_SUB(@DATE, INTERVAL @TH DAY)
+LEFT JOIN disease_reports AS Prev ON Prev.country_id = DR.country_id AND Prev.date = DATE_SUB(@DATE, INTERVAL @TH DAY)
 LEFT JOIN VR
     ON VR.country_id = DR.country_id
 GROUP BY C.continent
