@@ -58,11 +58,12 @@ namespace CovidTracker
         [Route("/Data/ByDate/Countries")]
         public ActionResult<List<CountryDateData>> DataByDate(DateTime date, int threshold=14) 
         {
+            if(threshold < 0) { return BadRequest(); }
             if(date < new DateTime(1900, 1, 1))
             {
                 return BadRequest("date too early");
             }
-            return HandleDatabaseOutput(_access.GetCountryDateData(date, threshold));
+            return HandleDatabaseOutput(_access.GetCountryDateData((DateTime) date, threshold));
         }
         /// <summary>
         /// Get the covid relevant data of the continents by date
@@ -74,11 +75,23 @@ namespace CovidTracker
         [Route("/Data/ByDate/Continents")]
         public ActionResult<List<ContinentDateData>> ContinentData(DateTime date, int threshold=14) 
         {
+            if(threshold < 0) { return BadRequest(); }
              if(date < new DateTime(1900, 1, 1))
             {
                 return BadRequest("date too early");
             }
             return HandleDatabaseOutput(_access.GetContinentDateData(date, threshold));
+        }
+        /// <summary>
+        /// Gets the latest date with disease reports
+        /// </summary>
+        [HttpGet]
+        [Route("Data/LatestDate")]
+        public ActionResult<DateTime> LatestDate()
+        {
+            DateTime? date = _access.LatestDate();
+            if(date == null) {  return NotFound(); }
+            return _access.LatestDate();
         }
         /// <summary>
         /// Get the covid relevant data of the world by date
@@ -90,6 +103,11 @@ namespace CovidTracker
         [Route("/Data/ByDate/World")]
         public ActionResult<WorldDateData> WorldData(DateTime date, int threshold=14) 
         {
+            if(threshold < 0) { return BadRequest(); }
+            if(date < new DateTime(1900, 1, 1))
+            {
+                return BadRequest("date too early");
+            }
             return HandleDatabaseOutput(_access.GetWorldData(date, threshold));
         }
         [HttpGet]
@@ -146,6 +164,10 @@ namespace CovidTracker
         [Route("/Data/AddDiseaseReport")]
         public ActionResult AddDiseaseReports([FromForm] IFormFile file)
         {
+            if(file == null)
+            {
+                return BadRequest();
+            }
             // must be logged in
             string name = HttpContext.Session.GetString("name");
             if(name == null)
@@ -167,6 +189,10 @@ namespace CovidTracker
         [Route("/Data/AddVaccineReport")]
         public ActionResult AddVaccineReports(DateTime? date, [FromForm] IFormFile file)
         {
+            if(file == null)
+            {
+                return BadRequest();
+            }
             // Must be logged in
             string name = HttpContext.Session.GetString("name");
             if(name == null)

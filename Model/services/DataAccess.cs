@@ -255,9 +255,21 @@ namespace CovidTracker
                 };
                 var a = OrNull(reader.GetValue(3));
                 data.Recovered = a is Decimal ? Decimal.ToInt32((Decimal) a) : (int?) a;
+
                 lst.Add(data);
             }
             return lst;
+        }
+        /// <summary>
+        /// Get date for the latest covid report
+        /// </summary>
+        public DateTime? LatestDate()
+        {
+            string sql  = "SELECT MAX(date) FROM disease_reports";
+            return Query(sql, (reader) => {
+                 if(!reader.Read()) { return null; } 
+                return (DateTime?) reader.GetDateTime(0);
+            });
         }
         /// <summary>
         /// Get covid data for a specific country
@@ -477,12 +489,11 @@ namespace CovidTracker
                 myCmd.ExecuteNonQuery();
             }
         }
-         /// <summary>
-        /// Get covid data for a specific country
+        /// <summary>
+        /// Insert vaccine records in bulk to a temporary table
         /// </summary>
-        /// <param name="countryID"></param>
-        /// <param name="start">earliest date for data</param>
-        /// <param name="end">latest date for data</param>
+        /// <param name="data">the vaccine data</param>
+        /// <param name="cnn"></param>
         public static void BulkInsertVac(List<CSVVaccineData> data, MySqlConnection cnn)
         {
             StringBuilder sCommand = new StringBuilder($"INSERT INTO temp_vaccine_reports VALUES ");           
@@ -500,6 +511,11 @@ namespace CovidTracker
                 myCmd.ExecuteNonQuery();
             }
         }
+        /// <summary>
+        /// Inserts covid reports into the database
+        /// </summary>
+        /// <param name="date">date of the records</param>
+        /// <param name="fileStream">CSV file stream</param>
         public void InsertCovidReports(DateTime date, Stream fileStream)
         {
             var sw = new Stopwatch();
@@ -509,9 +525,11 @@ namespace CovidTracker
             {
                 parser.TextFieldType = FieldType.Delimited;
                 parser.SetDelimiters(",");
+                // get field names
                 var headers = parser.ReadFields();
                 var columnNames = headers.Select((str, index) => new { str = str, index = index })
                                 .ToDictionary(x => x.str, x => x.index);
+                // the country header could be either of those
                 string countryRegion = "Country_Region";
                 if(!columnNames.ContainsKey(countryRegion))
                 {
@@ -555,12 +573,14 @@ namespace CovidTracker
                 {   
                     try
                     {
+                        // insert records into temporary table
                         string sql = LongQueries["TempDiseaseTable"];
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         command.ExecuteNonQuery();
                         Debug.WriteLine("temp table  " + sw.Elapsed);
                         BulkInsertCovid(dict.Values.ToList(), cnn);
                         Debug.WriteLine("add to temp table "  + sw.Elapsed);
+                        // insert into disease_reports table
                         sql = LongQueries["AddDiseaseReports"];
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         {
@@ -568,6 +588,7 @@ namespace CovidTracker
                             command.ExecuteNonQuery();
                         }
                         Debug.WriteLine("add to table " + sw.Elapsed);
+                        // drop temporary table
                         sql = "DROP TEMPORARY TABLE temp_disease_reports";
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         command.ExecuteNonQuery();
@@ -599,6 +620,8 @@ namespace CovidTracker
             var dictus = new Dictionary<string, string>();
             sw.Start();
             var lst = new List<CSVVaccineData>();
+            // stores the latest number of fully vaccinated and number of boosters
+            // for each country to fill in empty fields
             var latest = new Dictionary<string, (int, int)>();
             using (TextFieldParser parser = new TextFieldParser(fileStream))
             {
@@ -659,7 +682,7 @@ namespace CovidTracker
                 {   
                     try
                     {
-                        // create a temporary table to store the data to make it faster to attach the country id
+                        // put records in temporary table
                         string sql = LongQueries["TempVaccineTable"];
                         using (MySqlCommand command = new MySqlCommand(sql, cnn))
                         command.ExecuteNonQuery();
