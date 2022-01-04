@@ -44,9 +44,9 @@ SELECT
     SUM(COALESCE(DR.recovered, 0)),
     SUM(DR.deaths),
     (SELECT SUM(population) FROM population_reports WHERE year = YEAR(@DATE)),
-    VR.vaccinated,
-    VR.fully_vaccinated,
-    VR.number_of_boosters
+    SUM(VR.vaccinated),
+    SUM(VR.fully_vaccinated),
+    SUM(VR.number_of_boosters)
 FROM disease_reports AS DR
 CROSS JOIN VR
 WHERE DR.date = @DATE
